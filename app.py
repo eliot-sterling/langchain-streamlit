@@ -1,6 +1,10 @@
+
+
+
 import streamlit as st
 from langchain.chat_models import ChatOpenAI
 from langchain.schema import HumanMessage
+from langchain.callbacks import get_openai_callback
 
 st.set_page_config(page_title="🦜🔗 LangChain Quickstart", page_icon="🦜", layout="wide")
 
@@ -18,16 +22,14 @@ with st.sidebar:
 
 st.markdown("---")
 
-@st.cache_data(show_spinner=False)
 def generate_response(input_text, model, api_key):
-    try:
-        chat = ChatOpenAI(temperature=0.7, model_name=model, openai_api_key=api_key)
-        messages = [HumanMessage(content=input_text)]
+    chat = ChatOpenAI(temperature=0.7, model_name=model, openai_api_key=api_key)
+    messages = [HumanMessage(content=input_text)]
+    
+    with get_openai_callback() as cb:
         response = chat(messages)
-        return response.content
-    except Exception as e:
-        st.error(f"An error occurred: {str(e)}")
-        return None
+    
+    return response.content, cb
 
 with st.form('my_form'):
     text = st.text_area('Enter your question:', 'What are the three key pieces of advice for learning how to code?')
@@ -35,15 +37,27 @@ with st.form('my_form'):
 
 if submitted:
     if not openai_api_key.startswith('sk-'):
-        st.warning('Please enter your OpenAI API key in the sidebar!', icon='⚠')
+        st.warning('Please enter your OpenAI API Key in the sidebar!', icon='⚠')
     else:
-        st.info('Generating response... Please wait.')
-        response = generate_response(text, model, openai_api_key)
-        if response:
-            st.success('Response generated successfully!')
-            st.write(response)
+        with st.spinner('Generating response... Please wait.'):
+            try:
+                response, cb = generate_response(text, model, openai_api_key)
+                st.success('Response generated successfully!')
+                st.write(response)
+
+                # Display API call information
+                st.info('API Call Information', icon='ℹ️')
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Total Tokens", cb.total_tokens)
+                    st.metric("Prompt Tokens", cb.prompt_tokens)
+                    st.metric("Completion Tokens", cb.completion_tokens)
+                with col2:
+                    st.metric("Total Cost (USD)", f"${cb.total_cost:.4f}")
+                    st.metric("Model Name", model)
+                    st.metric("Successful Requests", cb.successful_requests)
+            except Exception as e:
+                st.error(f"An error occurred: {str(e)}")
 
 st.markdown("---")
 st.markdown("Created with ❤️ using Streamlit and LangChain")
-
-
